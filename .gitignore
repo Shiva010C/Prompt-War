@@ -1,0 +1,9 @@
+# Credentials & Secrets (NEVER commit these)
+*firebase-adminsdk*.json
+service-account.json
+*.json.key
+
+# Environment files
+.env
+.env.*
+!.env.example

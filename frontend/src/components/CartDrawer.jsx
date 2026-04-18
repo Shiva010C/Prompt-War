@@ -1,7 +1,7 @@
 import { useCart } from '../context/CartContext';
 
-export default function CartDrawer({ showCart, setShowCart }) {
-  const { cart, totalCartPrice, handleRemoveItem, checkout } = useCart();
+export default function CartDrawer({ showCart, setShowCart, onCheckout, isCheckingOut }) {
+  const { cart, totalCartPrice, handleRemoveItem } = useCart();
 
   if (!showCart) return null;
 
@@ -13,8 +13,8 @@ export default function CartDrawer({ showCart, setShowCart }) {
             <span className="material-symbols-outlined text-primary" aria-hidden="true">shopping_cart</span>
             <h3 className="text-xl font-headline font-black text-white">Your Cart</h3>
           </div>
-          <button 
-            onClick={() => setShowCart(false)} 
+          <button
+            onClick={() => setShowCart(false)}
             className="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:text-white active:scale-95"
             aria-label="Close Cart"
           >
@@ -37,7 +37,7 @@ export default function CartDrawer({ showCart, setShowCart }) {
                     <span className="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-white font-black">x{item.qty}</span>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => handleRemoveItem(item.name)}
                   className="w-8 h-8 rounded-full bg-error/10 text-error flex items-center justify-center hover:bg-error/20 active:scale-95 ml-3 shrink-0"
                   aria-label={`Remove ${item.name}`}
@@ -53,13 +53,17 @@ export default function CartDrawer({ showCart, setShowCart }) {
             <span className="text-on-surface-variant font-bold text-sm">Total</span>
             <span className="text-2xl font-black font-headline text-white">${totalCartPrice}</span>
           </div>
-          <button 
-            onClick={() => { checkout(); setShowCart(false); }}
-            disabled={cart.length === 0}
+          <button
+            onClick={onCheckout}
+            disabled={cart.length === 0 || isCheckingOut}
             aria-label="Checkout"
             className="w-full py-4 bg-gradient-to-r from-primary to-primary-container text-on-primary-container font-black rounded-xl uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 flex justify-center items-center gap-2"
           >
-            Checkout Now
+            {isCheckingOut ? (
+              <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              'Checkout Now'
+            )}
           </button>
         </div>
       </div>

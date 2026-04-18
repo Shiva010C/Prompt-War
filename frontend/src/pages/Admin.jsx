@@ -1,289 +1,325 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { db } from '../lib/firebase.js';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { sendBroadcast, updateWaitTime, updateOrderStatus, resolveIncident } from '../lib/api.js';
 
 export default function Admin() {
+  const { user, logout } = useAuth();
+  const { showNotification } = useToast();
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [broadcastText, setBroadcastText] = useState('');
-  const { showNotification } = useToast();
-  
-  // Wait Time States
+  const [isSending, setIsSending] = useState(false);
+
+  // Live Firestore State
+  const [activeOrders, setActiveOrders] = useState([]);
+  const [incidents, setIncidents] = useState([]);
   const [waitTimes, setWaitTimes] = useState({
     restroomNorth: 12,
     restroomSouth: 4,
     foodMain: 25,
-    foodUpper: 2
+    foodUpper: 2,
   });
 
-  const handleBroadcast = () => {
-    // Sanitize and validate input
-    const sanitizedText = broadcastText.trim();
-    if (!sanitizedText) {
-      showNotification('Please enter an announcement first.', 'error');
-      return;
+  // Real-time Firestore listeners
+  useEffect(() => {
+    const ordersQ = query(
+      collection(db, 'orders'),
+      where('status', 'in', ['Received', 'Preparing', 'Ready']),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubOrders = onSnapshot(ordersQ, (snap) => {
+      setActiveOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const incidentsQ = query(
+      collection(db, 'incidents'),
+      where('status', '==', 'active'),
+      orderBy('timestamp', 'desc')
+    );
+    const unsubIncidents = onSnapshot(incidentsQ, (snap) => {
+      setIncidents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      if (snap.docChanges().some(c => c.type === 'added')) {
+        showNotification('🚨 New incident reported!', 'error');
+      }
+    });
+
+    const waitTimesQ = collection(db, 'wait_times');
+    const unsubWait = onSnapshot(waitTimesQ, (snap) => {
+      const data = {};
+      snap.forEach(d => { data[d.id] = d.data().estimatedWaitMinutes; });
+      if (Object.keys(data).length > 0) setWaitTimes(prev => ({ ...prev, ...data }));
+    });
+
+    return () => { unsubOrders(); unsubIncidents(); unsubWait(); };
+  }, [showNotification]);
+
+  const handleBroadcast = async () => {
+    const text = broadcastText.trim();
+    if (!text) { showNotification('Please enter an announcement.', 'error'); return; }
+    setIsSending(true);
+    try {
+      await sendBroadcast(text);
+      setBroadcastText('');
+      showNotification('Global broadcast sent to all attendees!', 'success');
+    } catch (err) {
+      showNotification(`Failed: ${err.message}`, 'error');
+    } finally {
+      setIsSending(false);
     }
-    showNotification('Global broadcast sent successfully!', 'success');
-    setBroadcastText(''); // Clear on successful broadcast
+  };
+
+  const handleWaitTimeUpdate = async (zone, value) => {
+    const minutes = Number(value);
+    setWaitTimes(prev => ({ ...prev, [zone]: minutes }));
+    try {
+      await updateWaitTime(zone, minutes);
+    } catch (err) {
+      showNotification(`Failed to sync ${zone}: ${err.message}`, 'error');
+    }
+  };
+
+  const handleOrderStatus = async (orderId, status) => {
+    try {
+      await updateOrderStatus(orderId, status);
+      showNotification(`Order updated to "${status}"`, 'success');
+    } catch (err) {
+      showNotification(`Failed: ${err.message}`, 'error');
+    }
+  };
+
+  const handleResolveIncident = async (incidentId) => {
+    try {
+      await resolveIncident(incidentId);
+      showNotification('Incident resolved.', 'success');
+    } catch (err) {
+      showNotification(`Failed: ${err.message}`, 'error');
+    }
   };
 
   return (
     <div className="flex h-screen w-full bg-surface text-on-surface overflow-hidden absolute inset-0 z-[100]">
-      {/* NavigationDrawer */}
+      {/* Sidebar */}
       <aside className="h-full w-64 border-r border-slate-800 bg-slate-900 flex flex-col py-8 shrink-0 relative z-20">
         <div className="px-6 mb-10">
           <h2 className="text-blue-400 font-bold tracking-tighter text-xl font-headline">ADMIN CONTROL</h2>
+          <p className="text-slate-500 text-[10px] uppercase tracking-widest mt-1 truncate">{user?.email}</p>
         </div>
         <nav className="flex-1" aria-label="Admin Navigation">
           <ul className="space-y-1">
             {[
               { id: 'Dashboard', icon: 'dashboard' },
-              { id: 'Crowds', icon: 'groups' },
+              { id: 'Orders', icon: 'receipt_long', badge: activeOrders.length || null },
+              { id: 'Incidents', icon: 'emergency', badge: incidents.length || null },
               { id: 'Announcements', icon: 'campaign' },
-              { id: 'Settings', icon: 'settings' }
+              { id: 'Wait Times', icon: 'schedule' },
             ].map(tab => (
-               <li key={tab.id}>
-               <button 
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center space-x-4 px-6 py-4 transition-all duration-200 ease-in-out cursor-pointer ${activeTab === tab.id ? 'bg-blue-600/10 text-blue-400 border-r-4 border-blue-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-                aria-current={activeTab === tab.id ? 'page' : undefined}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">{tab.icon}</span>
-                <span className="font-headline font-medium">{tab.id}</span>
-              </button>
+              <li key={tab.id}>
+                <button
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center space-x-4 px-6 py-4 transition-all duration-200 cursor-pointer ${activeTab === tab.id ? 'bg-blue-600/10 text-blue-400 border-r-4 border-blue-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                  aria-current={activeTab === tab.id ? 'page' : undefined}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">{tab.icon}</span>
+                  <span className="font-headline font-medium flex-1 text-left">{tab.id}</span>
+                  {tab.badge ? (
+                    <span className="w-5 h-5 bg-error rounded-full text-white text-[10px] font-black flex items-center justify-center animate-pulse">{tab.badge}</span>
+                  ) : null}
+                </button>
               </li>
             ))}
           </ul>
         </nav>
         <div className="px-6 pt-6 border-t border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
-              <img className="w-full h-full object-cover" alt="Admin portrait Marcus Chen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpMEakMmk1sqMQP0CYjg4hQNBWLHP8_ZC9hOBnAim9KYCbyKygt0lst3-dE0ZL18v0PMbEUbsJD-Z3c3qWKz32BqFtcku3yR6AvqyHnLwhKE1X50SedYT7uNtWiT5Zl4LW9QMgv3esEF4a26coOtMJhrGm3WACo222o-z_dq2Rn6EkPbmRXoMJEaLvFCNErXFvVmyepMBz_BDxwqj-KbiGsWeZ5LLjxJLf6cWY-BZoP0B5uKcl2uw1lgZntT84ACuVv2f3hCRyp8CP"/>
-            </div>
-            <div>
-              <p className="text-sm font-bold">Marcus Chen</p>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest">Head of Ops</p>
-            </div>
-          </div>
+          <button onClick={logout} className="flex items-center gap-3 text-slate-400 hover:text-white transition-colors w-full">
+            <span className="material-symbols-outlined" aria-hidden="true">logout</span>
+            <span className="text-sm font-bold">Sign Out</span>
+          </button>
         </div>
       </aside>
-      
-      {/* Main Content Canvas */}
-      <main className="flex-1 flex flex-col relative overflow-y-auto">
-        <header className="fixed top-0 right-0 lg:left-64 left-0 z-50 bg-slate-950/60 backdrop-blur-xl flex justify-between items-center px-4 lg:px-8 h-16 w-full lg:w-[calc(100%-16rem)]">
+
+      {/* Main */}
+      <main className="flex-1 flex flex-col overflow-y-auto">
+        <header className="sticky top-0 z-50 bg-slate-950/60 backdrop-blur-xl flex justify-between items-center px-8 h-16 border-b border-slate-800">
           <h1 className="text-xl font-black italic text-blue-400 font-headline tracking-tight uppercase">{activeTab}</h1>
-          <div className="flex items-center gap-4 lg:gap-6">
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 px-3 py-1 bg-surface-container rounded-full border border-outline-variant/20">
-              <span className="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_#cafd00] animate-pulse"></span>
-              <span className="text-[10px] font-bold uppercase tracking-tighter text-on-surface-variant">Live Mode</span>
+              <span className="w-2 h-2 rounded-full bg-tertiary animate-ping"></span>
+              <span className="text-[10px] font-bold uppercase tracking-tighter text-on-surface-variant">Live</span>
             </div>
-            <button aria-label="View notifications" className="text-slate-400 hover:bg-slate-800/50 transition-colors p-2 rounded-full active:scale-95 duration-150">
-              <span className="material-symbols-outlined" aria-hidden="true">notifications</span>
-            </button>
           </div>
         </header>
 
-        {/* Dashboard Grid */}
-        <div className="mt-16 p-4 lg:p-8 grid grid-cols-12 gap-6 pb-24">
-          {/* Hero Metric: Map with Heat Overlay */}
-          <section className="col-span-12 lg:col-span-8 bg-surface-container-low rounded-3xl overflow-hidden relative group h-[300px] lg:h-[480px]">
-            <div className="absolute inset-0 z-0">
-              <img loading="lazy" decoding="async" className="w-full h-full object-cover opacity-30 grayscale contrast-125 pointer-events-none" alt="Stadium blueprint heatmap" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLOFcAMS-_PtgsQhs3hk4nyNjOZs5dhWXI1FPNgNMCqgfsDET7vZHKIKbsLCcQn6la9y8gdAUrlS3dLAQeqkh2NRt4qnAvmiw15iyUI9sVj12K3TZ_QUFdlcUuX12iNI8G4u0-tbBRpqlm7TDRTgAlrn1kbRQzhwllhpN6j6zOBBlKs_cpD-jdUhgg5SUyUGP4IqJiXKXJhjVTaa2zEv19z8Tjlp0ohvoPTgSsNJhvvh40uyvOg2FtlvOaO2kezOVGZOrpy6j9xnvA"/>
-              {/* Heatmap Overlay Elements */}
-              <div className="absolute top-1/4 left-1/3 w-32 lg:w-48 h-32 lg:h-48 bg-error rounded-full blur-[40px] opacity-60 animate-pulse"></div>
-              <div className="absolute bottom-1/4 right-1/4 w-48 lg:w-64 h-48 lg:h-64 bg-secondary rounded-full blur-[40px] opacity-60"></div>
-              <div className="absolute top-1/2 left-1/2 w-24 lg:w-32 h-24 lg:h-32 bg-tertiary rounded-full blur-[40px] opacity-60"></div>
-            </div>
-            <div className="relative z-10 p-6 flex flex-col h-full pointer-events-none">
-              <div className="flex justify-between items-start pointer-events-auto">
-                <div>
-                  <h3 className="text-lg lg:text-2xl font-headline font-black tracking-tight uppercase">Zone Density Map</h3>
-                  <p className="text-on-surface-variant text-xs lg:text-sm">Real-time attendance tracking</p>
-                </div>
-                <div className="hidden lg:flex bg-slate-950/80 backdrop-blur-md p-3 rounded-2xl flex-col gap-2">
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-error"></div><span className="text-[10px] uppercase font-bold text-white">Critical (90%+)</span></div>
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-secondary"></div><span className="text-[10px] uppercase font-bold text-white">Heavy (75%+)</span></div>
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-tertiary"></div><span className="text-[10px] uppercase font-bold text-white">Optimal (&lt;40%)</span></div>
-                </div>
-              </div>
-              <div className="mt-auto pointer-events-auto">
-                <button 
-                  onClick={() => showNotification('Opening Full Screen Operations Map', 'info')}
-                  className="bg-surface-bright/80 backdrop-blur-xl px-6 py-3 rounded-full border border-white/10 text-white text-xs lg:text-sm font-bold flex items-center gap-2 hover:bg-surface-bright transition-all"
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">zoom_in</span> Full Screen Map
-                </button>
-              </div>
-            </div>
-          </section>
+        <div className="p-8 space-y-6 pb-24">
 
-          {/* Trigger Announcement */}
-          <section className="col-span-12 lg:col-span-4 bg-surface-container-high rounded-3xl p-6 flex flex-col group focus-within:ring-2 focus-within:ring-secondary/50 transition-all">
-            <div className="flex items-center gap-3 mb-6">
-              <span className="material-symbols-outlined text-secondary text-2xl lg:text-3xl" aria-hidden="true">campaign</span>
-              <h3 className="text-lg lg:text-xl font-headline font-bold uppercase tracking-tight text-white">Broadcast Tool</h3>
+          {/* ── DASHBOARD ── */}
+          {activeTab === 'Dashboard' && (
+            <div className="grid grid-cols-3 gap-6">
+              <div className="col-span-1 bg-surface-container-high rounded-3xl p-6 flex flex-col gap-2">
+                <span className="material-symbols-outlined text-secondary text-3xl" aria-hidden="true">receipt_long</span>
+                <p className="text-4xl font-black font-headline text-white">{activeOrders.length}</p>
+                <p className="text-on-surface-variant text-sm font-bold uppercase tracking-widest">Active Orders</p>
+              </div>
+              <div className="col-span-1 bg-surface-container-high rounded-3xl p-6 flex flex-col gap-2">
+                <span className="material-symbols-outlined text-error text-3xl" aria-hidden="true">emergency</span>
+                <p className="text-4xl font-black font-headline text-white">{incidents.length}</p>
+                <p className="text-on-surface-variant text-sm font-bold uppercase tracking-widest">Active Incidents</p>
+              </div>
+              <div className="col-span-1 bg-surface-container-high rounded-3xl p-6 flex flex-col gap-2">
+                <span className="material-symbols-outlined text-tertiary text-3xl" aria-hidden="true">schedule</span>
+                <p className="text-4xl font-black font-headline text-white">{Object.values(waitTimes).reduce((a, b) => a + Number(b), 0)}</p>
+                <p className="text-on-surface-variant text-sm font-bold uppercase tracking-widest">Total Wait Minutes</p>
+              </div>
             </div>
-            <div className="flex-1 flex flex-col gap-4">
-              <div className="flex-1">
-                <label htmlFor="broadcast-input" className="block text-[10px] uppercase font-black text-on-surface-variant mb-2 tracking-widest">Emergency or Staff Message</label>
-                <textarea 
+          )}
+
+          {/* ── ORDERS ── */}
+          {activeTab === 'Orders' && (
+            <div className="space-y-4">
+              {activeOrders.length === 0 && (
+                <div className="text-center py-20 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-4xl mb-3 block" aria-hidden="true">receipt_long</span>
+                  <p>No active orders right now.</p>
+                </div>
+              )}
+              {activeOrders.map(order => (
+                <div key={order.id} className="bg-surface-container-high rounded-3xl p-6 flex justify-between items-start gap-6">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                        order.status === 'Received' ? 'bg-secondary/20 text-secondary' :
+                        order.status === 'Preparing' ? 'bg-primary/20 text-primary' :
+                        'bg-tertiary/20 text-tertiary'
+                      }`}>{order.status}</span>
+                      <span className="text-slate-500 text-xs">#{order.id.slice(-6)}</span>
+                    </div>
+                    <ul className="space-y-1">
+                      {order.items?.map(item => (
+                        <li key={item.name} className="text-sm text-white">
+                          {item.qty}x {item.name} — <span className="text-secondary">${item.price * item.qty}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-slate-500 text-xs mt-2">{order.userEmail}</p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {order.status === 'Received' && (
+                      <button onClick={() => handleOrderStatus(order.id, 'Preparing')} className="px-4 py-2 bg-primary/20 text-primary rounded-xl text-xs font-bold hover:bg-primary hover:text-white active:scale-95 transition-all">
+                        Start Preparing
+                      </button>
+                    )}
+                    {order.status === 'Preparing' && (
+                      <button onClick={() => handleOrderStatus(order.id, 'Ready')} className="px-4 py-2 bg-tertiary/20 text-tertiary rounded-xl text-xs font-bold hover:bg-tertiary hover:text-white active:scale-95 transition-all">
+                        Mark Ready
+                      </button>
+                    )}
+                    {order.status === 'Ready' && (
+                      <button onClick={() => handleOrderStatus(order.id, 'Completed')} className="px-4 py-2 bg-slate-700 text-slate-300 rounded-xl text-xs font-bold active:scale-95 transition-all">
+                        Complete
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── INCIDENTS ── */}
+          {activeTab === 'Incidents' && (
+            <div className="space-y-4">
+              {incidents.length === 0 && (
+                <div className="text-center py-20 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-4xl mb-3 block" aria-hidden="true">check_circle</span>
+                  <p>No active incidents. All clear!</p>
+                </div>
+              )}
+              {incidents.map(inc => (
+                <div key={inc.id} className="bg-surface-container-high rounded-3xl p-6 flex justify-between items-center gap-6 border border-error/20">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-error/20 rounded-2xl flex items-center justify-center">
+                      <span className="material-symbols-outlined text-error" aria-hidden="true">
+                        {inc.type === 'sos' ? 'emergency_home' : inc.type === 'medical' ? 'medical_services' : inc.type === 'security' ? 'shield_with_heart' : 'search_check'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-bold text-white uppercase text-sm">{inc.type} alert</p>
+                      <p className="text-slate-400 text-xs">Location: {inc.location}</p>
+                      <p className="text-slate-500 text-xs">{inc.userEmail}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => handleResolveIncident(inc.id)} className="px-4 py-2 bg-tertiary/20 text-tertiary rounded-xl text-xs font-bold hover:bg-tertiary hover:text-white active:scale-95 transition-all">
+                    Resolve
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── ANNOUNCEMENTS ── */}
+          {activeTab === 'Announcements' && (
+            <div className="max-w-xl">
+              <div className="bg-surface-container-high rounded-3xl p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="material-symbols-outlined text-secondary text-2xl" aria-hidden="true">campaign</span>
+                  <h3 className="text-xl font-headline font-bold text-white uppercase">Broadcast Tool</h3>
+                </div>
+                <label htmlFor="broadcast-input" className="block text-[10px] uppercase font-black text-on-surface-variant mb-2 tracking-widest">
+                  Announcement Message (max 280 chars)
+                </label>
+                <textarea
                   id="broadcast-input"
                   value={broadcastText}
                   onChange={(e) => setBroadcastText(e.target.value)}
-                  className="w-full h-32 lg:h-40 bg-surface-container-highest border-0 rounded-2xl p-4 text-sm text-white placeholder:text-slate-600 font-body focus:ring-1 focus:ring-secondary/50 resize-none outline-none" 
-                  placeholder="Type announcement here... e.g., Gates 4 and 5 are currently at low capacity for exit."
-                  autoComplete="off"
-                  spellCheck="true"
-                ></textarea>
-              </div>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-surface-container-low rounded-xl cursor-pointer hover:bg-surface-container-highest transition-colors">
-                  <span className="text-xs font-bold text-white">Target: All Attendees</span>
-                  <div className="w-10 h-5 bg-secondary rounded-full relative flex items-center px-1">
-                    <div className="w-3 h-3 bg-white rounded-full ml-auto"></div>
-                  </div>
+                  maxLength={280}
+                  rows={5}
+                  className="w-full bg-surface-container-highest rounded-2xl p-4 text-sm text-white placeholder:text-slate-600 focus:ring-1 focus:ring-secondary/50 resize-none outline-none mb-6"
+                  placeholder="e.g. Gates 4 and 5 now available for faster exit..."
+                />
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 text-xs">{broadcastText.length}/280</span>
+                  <button
+                    onClick={handleBroadcast}
+                    disabled={isSending}
+                    className="px-8 py-4 bg-gradient-to-r from-secondary to-secondary-container text-on-secondary font-black uppercase tracking-widest rounded-full active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isSending ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <span className="material-symbols-outlined" aria-hidden="true">send</span>}
+                    Send to All
+                  </button>
                 </div>
-                <button 
-                  onClick={handleBroadcast}
-                  className="w-full py-4 bg-gradient-to-r from-secondary to-secondary-container text-on-secondary font-black uppercase tracking-widest rounded-full hover:shadow-[0_0_20px_rgba(255,116,59,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">send</span> Send to All
-                </button>
               </div>
             </div>
-          </section>
+          )}
 
-          {/* Crowd Density Table */}
-          <section className="col-span-12 lg:col-span-7 bg-surface-container-low rounded-3xl p-6">
-            <div className="flex justify-between items-center mb-8">
-              <h3 className="text-lg lg:text-xl font-headline font-bold uppercase tracking-tight text-white">Real-Time Zone Density</h3>
-              <span className="text-[10px] font-black bg-surface-container-highest px-3 py-1 rounded-full text-on-surface-variant uppercase">Updated live</span>
-            </div>
-            <div className="space-y-1" role="table" aria-label="Zone Density">
-              {/* Table Header */}
-              <div className="grid grid-cols-4 px-4 py-2 text-[8px] lg:text-[10px] font-black text-on-surface-variant uppercase tracking-widest gap-2" role="row">
-                <span role="columnheader">Zone</span>
-                <span role="columnheader" className="text-center">Capacity</span>
-                <span role="columnheader" className="text-center">Flow</span>
-                <span role="columnheader" className="text-right">Action</span>
-              </div>
-              {/* Table Rows */}
-              <div className="grid grid-cols-4 px-2 lg:px-4 py-4 lg:py-5 items-center bg-surface rounded-2xl hover:bg-surface-container-high transition-colors gap-2 cursor-pointer" role="row">
-                <span className="font-headline font-bold text-white text-xs lg:text-base" role="cell">North Gate A</span>
-                <div role="cell" className="flex flex-col items-center">
-                  <div className="w-16 lg:w-24 h-1.5 bg-surface-container-highest rounded-full overflow-hidden" aria-label="92% capacity">
-                    <div className="h-full bg-error w-[92%]"></div>
+          {/* ── WAIT TIMES ── */}
+          {activeTab === 'Wait Times' && (
+            <div className="max-w-xl space-y-6">
+              {[
+                { key: 'restroomNorth', label: 'Restroom Zone 1-4 (North)', color: 'accent-primary' },
+                { key: 'restroomSouth', label: 'Restroom Zone 5-8 (South)', color: 'accent-tertiary' },
+                { key: 'foodMain', label: 'Main Plaza Grill', color: 'accent-secondary' },
+                { key: 'foodUpper', label: 'Upper Tier Snacks', color: 'accent-tertiary' },
+              ].map(({ key, label, color }) => (
+                <div key={key} className="bg-surface-container-high rounded-3xl p-6">
+                  <div className="flex justify-between text-xs font-bold mb-3">
+                    <label htmlFor={key} className="text-on-surface-variant">{label}</label>
+                    <span className="text-white bg-surface-container-highest px-2 py-0.5 rounded">{waitTimes[key]} MIN</span>
                   </div>
-                  <span className="text-[8px] lg:text-[10px] mt-1 font-bold text-white">92%</span>
-                </div>
-                <span role="cell" className="text-center font-mono text-error font-bold text-[10px] lg:text-sm">CRIT</span>
-                <div role="cell" className="text-right"><span className="px-2 lg:px-3 py-1 rounded-full bg-error/10 text-error text-[8px] lg:text-[10px] font-black whitespace-nowrap">HOLD</span></div>
-              </div>
-              <div className="grid grid-cols-4 px-2 lg:px-4 py-4 lg:py-5 items-center bg-surface rounded-2xl hover:bg-surface-container-high transition-colors gap-2 cursor-pointer" role="row">
-                <span className="font-headline font-bold text-white text-xs lg:text-base" role="cell">East Concourse</span>
-                <div role="cell" className="flex flex-col items-center">
-                  <div className="w-16 lg:w-24 h-1.5 bg-surface-container-highest rounded-full overflow-hidden" aria-label="74% capacity">
-                    <div className="h-full bg-secondary w-[74%]"></div>
-                  </div>
-                  <span className="text-[8px] lg:text-[10px] mt-1 font-bold text-white">74%</span>
-                </div>
-                <span role="cell" className="text-center font-mono text-secondary font-bold text-[10px] lg:text-sm">HEAVY</span>
-                <div role="cell" className="text-right"><span className="px-2 lg:px-3 py-1 rounded-full bg-secondary/10 text-secondary text-[8px] lg:text-[10px] font-black whitespace-nowrap">MONITOR</span></div>
-              </div>
-            </div>
-          </section>
-
-          {/* Wait Time Management */}
-          <section className="col-span-12 lg:col-span-5 flex flex-col gap-6">
-            <div className="bg-surface-container-high rounded-3xl p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary" aria-hidden="true">wc</span>
-                  <h4 className="font-headline font-bold uppercase text-sm text-white">Restroom Wait Times</h4>
-                </div>
-              </div>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-bold">
-                    <label htmlFor="restroomNorth" className="text-on-surface-variant">Zone 1-4 (North)</label>
-                    <span className="text-white bg-surface-container-highest px-2 py-0.5 rounded">{waitTimes.restroomNorth} MIN</span>
-                  </div>
-                  <input 
-                    id="restroomNorth"
-                    type="range" 
-                    min="0" max="60" 
-                    value={waitTimes.restroomNorth}
-                    onChange={(e) => setWaitTimes({...waitTimes, restroomNorth: e.target.value})}
-                    className="w-full accent-primary h-2 bg-surface-container-highest rounded-lg appearance-none cursor-pointer hover:opacity-80 transition-opacity" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-bold">
-                    <label htmlFor="restroomSouth" className="text-on-surface-variant">Zone 5-8 (South)</label>
-                    <span className="text-white bg-surface-container-highest px-2 py-0.5 rounded">{waitTimes.restroomSouth} MIN</span>
-                  </div>
-                  <input 
-                    id="restroomSouth"
+                  <input
+                    id={key}
                     type="range"
-                    min="0" max="60" 
-                    value={waitTimes.restroomSouth}
-                    onChange={(e) => setWaitTimes({...waitTimes, restroomSouth: e.target.value})}
-                    className="w-full accent-tertiary h-2 bg-surface-container-highest rounded-lg appearance-none cursor-pointer hover:opacity-80 transition-opacity" 
+                    min="0"
+                    max="60"
+                    value={waitTimes[key]}
+                    onChange={(e) => handleWaitTimeUpdate(key, e.target.value)}
+                    className={`w-full ${color} h-2 bg-surface-container-highest rounded-lg appearance-none cursor-pointer`}
                   />
                 </div>
-              </div>
+              ))}
             </div>
-            <div className="bg-surface-container-high rounded-3xl p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-secondary" aria-hidden="true">fastfood</span>
-                  <h4 className="font-headline font-bold uppercase text-sm text-white">Food Court Wait Times</h4>
-                </div>
-              </div>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-bold">
-                    <label htmlFor="foodMain" className="text-on-surface-variant">Main Plaza Grill</label>
-                    <span className="text-white bg-surface-container-highest px-2 py-0.5 rounded">{waitTimes.foodMain} MIN</span>
-                  </div>
-                  <input 
-                    id="foodMain"
-                    type="range"
-                    min="0" max="60" 
-                    value={waitTimes.foodMain}
-                    onChange={(e) => setWaitTimes({...waitTimes, foodMain: e.target.value})}
-                    className="w-full accent-secondary h-2 bg-surface-container-highest rounded-lg appearance-none cursor-pointer hover:opacity-80 transition-opacity" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-bold">
-                    <label htmlFor="foodUpper" className="text-on-surface-variant">Upper Tier Snacks</label>
-                    <span className="text-white bg-surface-container-highest px-2 py-0.5 rounded">{waitTimes.foodUpper} MIN</span>
-                  </div>
-                  <input 
-                    id="foodUpper"
-                    type="range"
-                    min="0" max="60" 
-                    value={waitTimes.foodUpper}
-                    onChange={(e) => setWaitTimes({...waitTimes, foodUpper: e.target.value})}
-                    className="w-full accent-tertiary h-2 bg-surface-container-highest rounded-lg appearance-none cursor-pointer hover:opacity-80 transition-opacity" 
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
+          )}
         </div>
       </main>
-      
-      {/* Floating Action for Mobile (Hidden on Desktop) */}
-      <button 
-        onClick={() => {
-            setActiveTab('Announcements');
-            showNotification('Switched to Quick Announcement Mode', 'info');
-        }}
-        aria-label="Switch to Quick Announcement"
-        className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-primary rounded-full shadow-2xl flex items-center justify-center text-on-primary-container z-[110] active:scale-95 transition-transform"
-      >
-        <span className="material-symbols-outlined" aria-hidden="true">campaign</span>
-      </button>
     </div>
   );
 }

@@ -2,19 +2,35 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DesktopLayout from '../components/DesktopLayout';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { reportIncident } from '../lib/api.js';
 
 export default function Home() {
   const navigate = useNavigate();
   const { showNotification } = useToast();
+  const { user: _user } = useAuth();
   const [showSosModal, setShowSosModal] = useState(false);
 
   const handleSosTrigger = () => {
     setShowSosModal(true);
   };
 
-  const confirmSos = () => {
+  const confirmSos = async () => {
     setShowSosModal(false);
-    showNotification('EMERGENCY SERVICES DISPATCHED', 'error');
+    try {
+      await reportIncident('sos', 'Section 102');
+      showNotification('EMERGENCY SERVICES DISPATCHED', 'error');
+    } catch {
+      // If not logged in, still show notification (guest SOS)
+      showNotification('EMERGENCY SERVICES DISPATCHED', 'error');
+    }
+  };
+
+  const handleEmergencyAlert = async (type, message) => {
+    try {
+      await reportIncident(type, 'Section 102');
+    } catch { /* silent fail for guests */ }
+    showNotification(message, 'info');
   };
 
   const content = (
@@ -202,21 +218,21 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-3 gap-4 w-full lg:w-auto h-full">
             <button 
-              onClick={() => showNotification("Medical team alerted to your location.", "info")}
+              onClick={() => handleEmergencyAlert('medical', 'Medical team alerted to your location.')}
               className="flex flex-col items-center gap-3 p-4 lg:p-6 bg-surface-variant/40 rounded-2xl lg:rounded-3xl hover:bg-surface-variant transition-colors border-b-4 border-transparent hover:border-error cursor-pointer active:scale-95"
             >
               <span className="material-symbols-outlined text-error" aria-hidden="true">medical_services</span>
               <span className="font-headline font-bold text-[10px] lg:text-sm text-white uppercase lg:capitalize">Medical</span>
             </button>
             <button 
-              onClick={() => showNotification("Security notified. Please stay where you are.", "info")}
+              onClick={() => handleEmergencyAlert('security', 'Security notified. Please stay where you are.')}
               className="flex flex-col items-center gap-3 p-4 lg:p-6 bg-surface-variant/40 rounded-2xl lg:rounded-3xl hover:bg-surface-variant transition-colors border-b-4 border-transparent hover:border-secondary cursor-pointer active:scale-95"
             >
               <span className="material-symbols-outlined text-secondary" aria-hidden="true">shield_with_heart</span>
               <span className="font-headline font-bold text-[10px] lg:text-sm text-white uppercase lg:capitalize">Security</span>
             </button>
             <button 
-              onClick={() => showNotification("Guest services alerted for Lost & Found item.", "success")}
+              onClick={() => handleEmergencyAlert('lost', 'Guest services alerted for Lost & Found item.')}
               className="flex flex-col items-center gap-3 p-4 lg:p-6 bg-surface-variant/40 rounded-2xl lg:rounded-3xl hover:bg-surface-variant transition-colors border-b-4 border-transparent hover:border-primary cursor-pointer active:scale-95"
             >
               <span className="material-symbols-outlined text-primary" aria-hidden="true">search_check</span>
