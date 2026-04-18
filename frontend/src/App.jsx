@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import TopNav from './components/TopNav';
 import BottomNav from './components/BottomNav';
+import BroadcastBanner from './components/BroadcastBanner';
 import { ToastProvider } from './context/ToastContext';
 import { CartProvider } from './context/CartContext';
 import { AuthProvider } from './context/AuthContext';
@@ -32,7 +33,7 @@ function AdminRoute() {
 
 function AppRoutes() {
   return (
-    <div className="dark">
+    <div className="dark min-h-screen bg-surface">
       <ToastProvider>
         <CartProvider>
           <TopNav />

@@ -24,7 +24,7 @@ export default function Ticket() {
   };
 
   const content = (
-    <div className="pt-24 px-6 max-w-2xl mx-auto space-y-8 pb-24 w-full">
+    <div className="pt-6 px-6 max-w-2xl mx-auto space-y-8 pb-6 w-full">
       {/* Fullscreen Scanner Modal */}
       {showScanner && (
         <div 
@@ -196,13 +196,8 @@ export default function Ticket() {
   );
 
   return (
-    <>
-      <div className="lg:hidden">
-        {content}
-      </div>
-      <DesktopLayout>
-        {content}
-      </DesktopLayout>
-    </>
+    <DesktopLayout>
+      {content}
+    </DesktopLayout>
   );
 }

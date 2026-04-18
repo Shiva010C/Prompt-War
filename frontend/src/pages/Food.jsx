@@ -79,7 +79,7 @@ export default function Food() {
   };
 
   const content = (
-    <div className="pt-20 px-6 max-w-5xl mx-auto space-y-8 pb-32 w-full relative">
+    <div className="pt-6 px-6 max-w-5xl mx-auto space-y-8 pb-6 w-full relative">
       <FoodMenuModal activeMenu={activeMenu} setActiveMenu={setActiveMenu} mockMenus={mockMenus} />
       <CartDrawer showCart={showCart} setShowCart={setShowCart} onCheckout={handleCheckout} isCheckingOut={isCheckingOut} />
 
@@ -198,9 +198,8 @@ export default function Food() {
   );
 
   return (
-    <>
-      <div className="lg:hidden">{content}</div>
-      <DesktopLayout>{content}</DesktopLayout>
-    </>
+    <DesktopLayout>
+      {content}
+    </DesktopLayout>
   );
 }

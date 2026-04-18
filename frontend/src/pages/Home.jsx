@@ -245,15 +245,8 @@ export default function Home() {
   );
 
   return (
-    <>
-      <div className="lg:hidden">
-        <main className="pt-20 pb-24 px-4 space-y-8 max-w-7xl mx-auto flex-1">
-          {content}
-        </main>
-      </div>
-      <DesktopLayout>
-        {content}
-      </DesktopLayout>
-    </>
+    <DesktopLayout>
+      {content}
+    </DesktopLayout>
   );
 }

@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, where, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { sendBroadcast, updateWaitTime, updateOrderStatus, resolveIncident } from '../lib/api.js';
+import { sendBroadcast, clearBroadcast, updateWaitTime, seedWaitTimes, updateOrderStatus, resolveIncident } from '../lib/api.js';
 
 export default function Admin() {
   const { user, logout } = useAuth();
   const { showNotification } = useToast();
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [broadcastText, setBroadcastText] = useState('');
+  const [activeBroadcast, setActiveBroadcast] = useState(null);
   const [isSending, setIsSending] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
 
   // Live Firestore State
   const [activeOrders, setActiveOrders] = useState([]);
@@ -29,8 +32,16 @@ export default function Admin() {
       where('status', 'in', ['Received', 'Preparing', 'Ready']),
       orderBy('createdAt', 'desc')
     );
-    const unsubOrders = onSnapshot(ordersQ, (snap) => {
-      setActiveOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubOrders = onSnapshot(ordersQ, {
+      next: (snap) => {
+        setActiveOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      },
+      error: (err) => {
+        console.error('Firestore Orders Error:', err);
+        if (err.code === 'failed-precondition') {
+          showNotification('Database Index Required: Check Console for setup link.', 'error');
+        }
+      }
     });
 
     const incidentsQ = query(
@@ -38,21 +49,41 @@ export default function Admin() {
       where('status', '==', 'active'),
       orderBy('timestamp', 'desc')
     );
-    const unsubIncidents = onSnapshot(incidentsQ, (snap) => {
-      setIncidents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      if (snap.docChanges().some(c => c.type === 'added')) {
-        showNotification('🚨 New incident reported!', 'error');
+    const unsubIncidents = onSnapshot(incidentsQ, {
+      next: (snap) => {
+        setIncidents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        if (snap.docChanges().some(c => c.type === 'added')) {
+          showNotification('🚨 New incident reported!', 'error');
+        }
+      },
+      error: (err) => {
+        console.error('Firestore Incidents Error:', err);
+        if (err.code === 'failed-precondition') {
+          showNotification('Database Index Required: Check Console for setup link.', 'error');
+        }
       }
     });
 
     const waitTimesQ = collection(db, 'wait_times');
-    const unsubWait = onSnapshot(waitTimesQ, (snap) => {
-      const data = {};
-      snap.forEach(d => { data[d.id] = d.data().estimatedWaitMinutes; });
-      if (Object.keys(data).length > 0) setWaitTimes(prev => ({ ...prev, ...data }));
+    const unsubstitutedWait = onSnapshot(waitTimesQ, {
+      next: (snap) => {
+        const data = {};
+        snap.forEach(d => { data[d.id] = d.data().estimatedWaitMinutes; });
+        if (Object.keys(data).length > 0) setWaitTimes(prev => ({ ...prev, ...data }));
+      },
+      error: (err) => console.error('Firestore WaitTimes Error:', err)
     });
 
-    return () => { unsubOrders(); unsubIncidents(); unsubWait(); };
+    const broadcastQ = query(collection(db, 'broadcasts'), orderBy('sentAt', 'desc'), limit(1));
+    const unsubBroadcast = onSnapshot(broadcastQ, (snap) => {
+      if (snap.empty) {
+        setActiveBroadcast(null);
+      } else {
+        setActiveBroadcast({ id: snap.docs[0].id, ...snap.docs[0].data() });
+      }
+    });
+
+    return () => { unsubOrders(); unsubIncidents(); unsubstitutedWait(); unsubBroadcast(); };
   }, [showNotification]);
 
   const handleBroadcast = async () => {
@@ -70,6 +101,18 @@ export default function Admin() {
     }
   };
 
+  const handleClearBroadcast = async () => {
+    setIsClearing(true);
+    try {
+      await clearBroadcast();
+      showNotification('Announcement removed from all screens.', 'info');
+    } catch (err) {
+      showNotification(`Failed to clear: ${err.message}`, 'error');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const handleWaitTimeUpdate = async (zone, value) => {
     const minutes = Number(value);
     setWaitTimes(prev => ({ ...prev, [zone]: minutes }));
@@ -77,6 +120,18 @@ export default function Admin() {
       await updateWaitTime(zone, minutes);
     } catch (err) {
       showNotification(`Failed to sync ${zone}: ${err.message}`, 'error');
+    }
+  };
+
+  const handleSeedWaitTimes = async () => {
+    setIsSeeding(true);
+    try {
+      await seedWaitTimes();
+      showNotification('Wait times synced with site defaults.', 'success');
+    } catch (err) {
+      showNotification(`Failed to seed: ${err.message}`, 'error');
+    } finally {
+      setIsSeeding(false);
     }
   };
 
@@ -264,6 +319,23 @@ export default function Admin() {
                   <span className="material-symbols-outlined text-secondary text-2xl" aria-hidden="true">campaign</span>
                   <h3 className="text-xl font-headline font-bold text-white uppercase">Broadcast Tool</h3>
                 </div>
+
+                {activeBroadcast && (
+                  <div className="mb-8 p-4 bg-secondary/10 border border-secondary/30 rounded-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-left-4 duration-500">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] uppercase font-black text-secondary tracking-widest mb-1">Current Active Broadcast</p>
+                      <p className="text-white text-sm font-bold truncate">"{activeBroadcast.message}"</p>
+                    </div>
+                    <button
+                      onClick={handleClearBroadcast}
+                      disabled={isClearing}
+                      className="px-4 py-2 bg-error/20 text-error hover:bg-error hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {isClearing ? '...' : 'Clear'}
+                    </button>
+                  </div>
+                )}
+
                 <label htmlFor="broadcast-input" className="block text-[10px] uppercase font-black text-on-surface-variant mb-2 tracking-widest">
                   Announcement Message (max 280 chars)
                 </label>
@@ -294,6 +366,20 @@ export default function Admin() {
           {/* ── WAIT TIMES ── */}
           {activeTab === 'Wait Times' && (
             <div className="max-w-xl space-y-6">
+              <div className="bg-surface-container-low border border-slate-800 rounded-3xl p-6 flex items-center justify-between">
+                <div>
+                  <h3 className="font-headline font-bold text-white uppercase tracking-tight">Zone Status Recovery</h3>
+                  <p className="text-slate-500 text-xs">If data is not loading, sync with site defaults.</p>
+                </div>
+                <button
+                  onClick={handleSeedWaitTimes}
+                  disabled={isSeeding}
+                  className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-full text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSeeding ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <span className="material-symbols-outlined text-sm">sync</span>}
+                  Sync Defaults
+                </button>
+              </div>
               {[
                 { key: 'restroomNorth', label: 'Restroom Zone 1-4 (North)', color: 'accent-primary' },
                 { key: 'restroomSouth', label: 'Restroom Zone 5-8 (South)', color: 'accent-tertiary' },

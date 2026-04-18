@@ -59,6 +59,11 @@ export const reportIncident = (type, location) =>
     body: JSON.stringify({ type, location }),
   });
 
+export const resolveIncident = (incidentId) =>
+  apiCall(`/admin/incidents/${incidentId}/resolve`, {
+    method: 'PATCH',
+  });
+
 // ─────────────────────────────────────────────
 // Broadcasts
 // ─────────────────────────────────────────────
@@ -68,7 +73,17 @@ export const sendBroadcast = (message, type = 'info') =>
     body: JSON.stringify({ message, type }),
   });
 
+export const clearBroadcast = () =>
+  apiCall('/admin/broadcast/clear', {
+    method: 'POST',
+  });
+
 export const getLatestBroadcast = () => apiCall('/broadcasts/latest');
+
+export const seedWaitTimes = () =>
+  apiCall('/admin/wait-times/seed', {
+    method: 'POST',
+  });
 
 // ─────────────────────────────────────────────
 // Admin Order Management

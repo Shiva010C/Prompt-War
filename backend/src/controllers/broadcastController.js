@@ -59,3 +59,28 @@ export async function getLatestBroadcast(req, res) {
     res.status(500).json({ error: 'Failed to fetch broadcast.' });
   }
 }
+
+/**
+ * POST /api/admin/broadcast/clear
+ * Admin only: Deletes the most recent broadcast document so it no longer shows on user screens.
+ */
+export async function clearLatestBroadcast(req, res) {
+  try {
+    const snapshot = await db.collection('broadcasts')
+      .orderBy('sentAt', 'desc')
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return res.json({ success: true, message: 'No active broadcast to clear.' });
+    }
+
+    const docId = snapshot.docs[0].id;
+    await db.collection('broadcasts').doc(docId).delete();
+
+    res.json({ success: true, message: 'Broadcast cleared successfully.' });
+  } catch (err) {
+    console.error('Error clearing broadcast:', err);
+    res.status(500).json({ error: 'Failed to clear broadcast.' });
+  }
+}
