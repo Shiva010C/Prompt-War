@@ -4,16 +4,25 @@ export default function Toast({ message, type = 'success', onClose, visible }) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
+    let showTimer;
+    let removeTimer;
+
     if (visible) {
-      setShow(true);
-      const timer = setTimeout(() => {
+      // Small timeout avoids synchronous cascade while still triggering the transition
+      showTimer = setTimeout(() => setShow(true), 10);
+      removeTimer = setTimeout(() => {
         setShow(false);
-        setTimeout(onClose, 300); // Wait for transition before fully removing
+        setTimeout(onClose, 300); // Wait for CSS transition before logical unmount
       }, 3000);
-      return () => clearTimeout(timer);
     } else {
-      setShow(false);
+      // Defer state update to avoid synchronous cascade error
+      setTimeout(() => setShow(false), 0);
     }
+
+    return () => {
+      clearTimeout(showTimer);
+      clearTimeout(removeTimer);
+    };
   }, [visible, onClose]);
 
   if (!visible && !show) return null;

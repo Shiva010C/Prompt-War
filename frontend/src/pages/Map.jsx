@@ -29,14 +29,18 @@ export default function Map() {
           <h2 className="text-3xl font-black tracking-tight mb-2 text-white transition-all">Full Venue Map</h2>
           <p className="text-on-surface-variant font-medium">Electric Stadium Level {activeLevel}</p>
         </div>
-        <div className="flex gap-2 bg-surface-container rounded-full p-1 border border-outline-variant/10">
+        <div className="flex gap-2 bg-surface-container rounded-full p-1 border border-outline-variant/10" role="tablist">
             <button 
+                role="tab"
+                aria-selected={activeLevel === 1}
                 onClick={() => setActiveLevel(1)}
                 className={`${activeLevel === 1 ? 'bg-surface-container-highest text-white shadow-md' : 'text-slate-400 hover:text-white'} px-4 py-2 rounded-full text-xs font-bold active:scale-95 transition-all`}
             >
                 Level 1
             </button>
             <button 
+                role="tab"
+                aria-selected={activeLevel === 2}
                 onClick={() => setActiveLevel(2)}
                 className={`${activeLevel === 2 ? 'bg-surface-container-highest text-white shadow-md' : 'text-slate-400 hover:text-white'} px-4 py-2 rounded-full text-xs font-bold active:scale-95 transition-all`}
             >
@@ -52,6 +56,8 @@ export default function Map() {
         >
             <div className="absolute inset-0 grayscale contrast-125 brightness-50">
                 <img 
+                    loading="lazy" 
+                    decoding="async"
                     alt={`Full Venue Map Level ${activeLevel}`} 
                     className={`w-full h-full object-cover transition-opacity duration-500`}
                     src={activeLevel === 1 
@@ -67,19 +73,20 @@ export default function Map() {
                     <div className="absolute top-[30%] left-[40%] group z-10 w-12 h-12 -ml-6 -mt-6 rounded-full flex items-center justify-center animate-bounce">
                         <div className={`absolute inset-0 bg-primary/30 rounded-full ${recenterAnim || 'animate-ping'}`}></div>
                         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary shadow-lg shadow-primary/40 relative z-10 cursor-default">
-                            <span className="material-symbols-outlined text-sm" style={{fontVariationSettings: "'FILL' 1"}}>my_location</span>
+                            <span className="material-symbols-outlined text-sm" aria-hidden="true" style={{fontVariationSettings: "'FILL' 1"}}>my_location</span>
                         </div>
                         <div className="absolute top-14 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-surface-bright backdrop-blur-md px-3 py-1 rounded-lg text-xs font-bold border border-white/10 pointer-events-none">
                             You are here (Sec 102)
                         </div>
                     </div>
                     
-                    <div 
-                        className="absolute top-[45%] left-[20%] z-10 cursor-pointer"
+                    <button 
+                        aria-label="View Grill & Chill Food Stand details"
+                        className="absolute top-[45%] left-[20%] z-10 cursor-pointer border-none bg-transparent outline-none p-0"
                         onClick={(e) => { e.stopPropagation(); setShowTooltip(!showTooltip); }}
                     >
                         <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-lg shadow-secondary/40 hover:scale-110 transition-transform">
-                            <span className="material-symbols-outlined text-sm" style={{fontVariationSettings: "'FILL' 1"}}>lunch_dining</span>
+                            <span className="material-symbols-outlined text-sm" aria-hidden="true" style={{fontVariationSettings: "'FILL' 1"}}>lunch_dining</span>
                         </div>
                         {showTooltip && (
                             <div className="absolute top-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-surface-bright/90 backdrop-blur-xl px-4 py-2 rounded-xl text-xs font-bold border border-white/20 shadow-2xl text-center z-20 animate-in fade-in zoom-in duration-200">
@@ -87,14 +94,14 @@ export default function Map() {
                                 <span className="block text-[10px] text-primary mt-1 bg-primary/10 px-2 py-0.5 rounded-md">15m wait</span>
                             </div>
                         )}
-                    </div>
+                    </button>
                 </>
             )}
 
             {activeLevel === 2 && (
                 <div className="absolute top-[60%] left-[55%] z-10">
                     <div className="w-10 h-10 rounded-full bg-tertiary flex items-center justify-center text-white shadow-lg shadow-tertiary/40">
-                        <span className="material-symbols-outlined text-sm" style={{fontVariationSettings: "'FILL' 1"}}>shopping_bag</span>
+                        <span className="material-symbols-outlined text-sm" aria-hidden="true" style={{fontVariationSettings: "'FILL' 1"}}>shopping_bag</span>
                     </div>
                     <div className="absolute top-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-surface-bright/90 backdrop-blur-xl px-4 py-2 rounded-xl text-xs font-bold border border-white/20 shadow-2xl text-center z-20">
                         Team Shop North
@@ -109,27 +116,30 @@ export default function Map() {
             <button 
                 onClick={handleZoomIn}
                 disabled={zoom >= 3}
+                aria-label="Zoom in"
                 className="w-10 h-10 bg-surface-bright/80 backdrop-blur-xl rounded-xl flex items-center justify-center hover:bg-surface-bright transition-colors border border-white/10 shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-white"
             >
-                <span className="material-symbols-outlined">add</span>
+                <span className="material-symbols-outlined" aria-hidden="true">add</span>
             </button>
             <button 
                 onClick={handleZoomOut}
                 disabled={zoom <= 1}
+                aria-label="Zoom out"
                 className="w-10 h-10 bg-surface-bright/80 backdrop-blur-xl rounded-xl flex items-center justify-center hover:bg-surface-bright transition-colors border border-white/10 shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-white"
             >
-                <span className="material-symbols-outlined">remove</span>
+                <span className="material-symbols-outlined" aria-hidden="true">remove</span>
             </button>
             <button 
                 onClick={handleRecenter}
+                aria-label="Recenter map"
                 className="w-10 h-10 bg-primary/20 backdrop-blur-xl rounded-xl flex items-center justify-center hover:bg-primary/30 text-primary transition-colors mt-2 shadow-lg active:scale-95"
             >
-                <span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 1"}}>my_location</span>
+                <span className="material-symbols-outlined" aria-hidden="true" style={{fontVariationSettings: "'FILL' 1"}}>my_location</span>
             </button>
         </div>
         
         {/* Categories Legend */}
-        <div className="absolute bottom-6 left-6 flex flex-wrap gap-2 z-30 max-w-[calc(100%-80px)] pointer-events-none">
+        <div className="absolute bottom-6 left-6 flex flex-wrap gap-2 z-30 max-w-[calc(100%-80px)] pointer-events-none" aria-hidden="true">
             <div className="bg-surface-bright/80 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-primary shadow-[0_0_8px_var(--tw-colors-primary)]"></div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-white">Gates</span>

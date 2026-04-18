@@ -16,7 +16,7 @@ export default function TopNav() {
               src="https://lh3.googleusercontent.com/aida-public/AB6AXuCej-xC6k-cjGsFIx5F_u4GfJlR40SPUkEPSiNc6NAHgrIVhCLohmda3HwRaCgqqy6OkdzYBy33RR2xBVXecbJZ6U2XhCJKUDstRiohC7C2I9oqbxPG2JjxF46Qx_g9P4NW-63v9UiM8Npm__Jiv6U6f_a2doZIgJWnJV5SFmwJrEhGUuSLbTl-LQ9OLnSCwbo2sw_Dt5XurXKL5n_60SCW6yHrBG-vZTaFYS02mUunke6Cu6RDsPE_vBBWYhvyjieQIiGZL1YHz7vn"
             />
           </div>
-          <Link to="/" className="text-xl font-black italic text-blue-400 font-headline uppercase tracking-tight">STADIUM</Link>
+          <Link to="/" className="text-xl font-black italic text-blue-400 font-headline uppercase tracking-tight">StadiaLive</Link>
         </div>
         <div className="flex items-center gap-4">
           <div className="relative group">
