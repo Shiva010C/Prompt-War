@@ -79,7 +79,7 @@ export default function Food() {
   };
 
   const content = (
-    <div className="pt-6 px-6 max-w-5xl mx-auto space-y-8 pb-6 w-full relative">
+    <div className="pt-4 px-2 max-w-5xl mx-auto space-y-8 pb-6 w-full relative">
       <FoodMenuModal activeMenu={activeMenu} setActiveMenu={setActiveMenu} mockMenus={mockMenus} />
       <CartDrawer showCart={showCart} setShowCart={setShowCart} onCheckout={handleCheckout} isCheckingOut={isCheckingOut} />
 

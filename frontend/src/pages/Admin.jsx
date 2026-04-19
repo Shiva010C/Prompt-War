@@ -19,10 +19,10 @@ export default function Admin() {
   const [activeOrders, setActiveOrders] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [waitTimes, setWaitTimes] = useState({
-    restroomNorth: 12,
-    restroomSouth: 4,
-    foodMain: 25,
-    foodUpper: 2,
+    gateA: 2,
+    grillChill: 15,
+    restrooms: 5,
+    teamShop: 0,
   });
 
   // Real-time Firestore listeners
@@ -381,10 +381,10 @@ export default function Admin() {
                 </button>
               </div>
               {[
-                { key: 'restroomNorth', label: 'Restroom Zone 1-4 (North)', color: 'accent-primary' },
-                { key: 'restroomSouth', label: 'Restroom Zone 5-8 (South)', color: 'accent-tertiary' },
-                { key: 'foodMain', label: 'Main Plaza Grill', color: 'accent-secondary' },
-                { key: 'foodUpper', label: 'Upper Tier Snacks', color: 'accent-tertiary' },
+                { key: 'gateA', label: 'Gate A Entrance', color: 'accent-primary' },
+                { key: 'grillChill', label: 'Grill & Chill Plaza', color: 'accent-secondary' },
+                { key: 'restrooms', label: 'Public Restrooms', color: 'accent-tertiary' },
+                { key: 'teamShop', label: 'Official Team Shop', color: 'accent-primary' },
               ].map(({ key, label, color }) => (
                 <div key={key} className="bg-surface-container-high rounded-3xl p-6">
                   <div className="flex justify-between text-xs font-bold mb-3">

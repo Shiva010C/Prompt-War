@@ -24,7 +24,9 @@ export default function BroadcastBanner() {
         setBroadcasts([]);
         return;
       }
-      setBroadcasts(snap.docs.map(d => d.data()));
+      // Get latest 10, then reverse to show them in chronological order (newest at the end)
+      const data = snap.docs.map(d => d.data()).reverse();
+      setBroadcasts(data);
     });
 
     return () => unsub();
@@ -51,12 +53,14 @@ export default function BroadcastBanner() {
     <div className="w-full relative z-[40] animate-in slide-in-from-top duration-300">
       <div className={`w-full h-10 flex items-center border-b border-slate-800 ${bgStyles[mainType]} backdrop-blur-md px-4 overflow-hidden`}>
         {/* Fixed Label Section */}
+        {/* VIEWPORT VISIBILITY: Meganphone icon shows on all, "Announcement" text only on lg screens */}
         <div className="flex-shrink-0 flex items-center gap-2 bg-slate-900 z-20 pr-6 relative shadow-[20px_0_30px_-5px_rgba(0,0,0,0.4)]">
           <span className="material-symbols-outlined text-[18px] text-secondary animate-pulse">campaign</span>
-          <span className="uppercase text-[10px] font-black tracking-[0.2em] whitespace-nowrap text-secondary">Announcement</span>
+          <span className="hidden lg:inline uppercase text-[10px] font-black tracking-[0.2em] whitespace-nowrap text-secondary">Announcement</span>
         </div>
 
         {/* Scrolling Ticker Section */}
+        {/* SPEED CONTROL: The scroll speed is controlled by the .animate-marquee class in index.css (currently 25s) */}
         <div className="flex-1 relative overflow-hidden h-full flex items-center">
           <div className="inline-block whitespace-nowrap animate-marquee">
             <span className="text-xs lg:text-sm font-bold tracking-tight px-4">

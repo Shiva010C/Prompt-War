@@ -23,7 +23,7 @@ export default function Map() {
   };
 
   const content = (
-    <div className="pt-6 px-6 max-w-5xl mx-auto space-y-8 pb-8 w-full flex flex-col h-screen">
+    <div className="pt-4 px-2 max-w-5xl mx-auto space-y-8 pb-6 w-full flex flex-col h-screen">
       <div className="flex justify-between items-end shrink-0">
         <div>
           <h2 className="text-3xl font-black tracking-tight mb-2 text-white transition-all">Full Venue Map</h2>
@@ -158,13 +158,8 @@ export default function Map() {
   );
 
   return (
-    <>
-      <div className="lg:hidden">
-        {content}
-      </div>
-      <DesktopLayout>
-        {content}
-      </DesktopLayout>
-    </>
+    <DesktopLayout>
+      {content}
+    </DesktopLayout>
   );
 }

@@ -54,10 +54,10 @@ export async function updateWaitTime(req, res) {
  */
 export async function seedWaitTimes(req, res) {
   const defaults = {
-    restroomNorth: 12,
-    restroomSouth: 4,
-    foodMain: 25,
-    foodUpper: 2,
+    gateA: 2,
+    grillChill: 15,
+    restrooms: 5,
+    teamShop: 0,
   };
 
   try {

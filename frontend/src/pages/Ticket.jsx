@@ -24,7 +24,7 @@ export default function Ticket() {
   };
 
   const content = (
-    <div className="pt-6 px-6 max-w-2xl mx-auto space-y-8 pb-6 w-full">
+    <div className="pt-4 px-2 max-w-2xl mx-auto space-y-8 pb-6 w-full">
       {/* Fullscreen Scanner Modal */}
       {showScanner && (
         <div 

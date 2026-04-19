@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase.js';
 import DesktopLayout from '../components/DesktopLayout';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -10,9 +12,47 @@ export default function Home() {
   const { showNotification } = useToast();
   const { user: _user } = useAuth();
   const [showSosModal, setShowSosModal] = useState(false);
+  const [waitTimes, setWaitTimes] = useState(null);
+
+  useEffect(() => {
+    const q = collection(db, 'wait_times');
+    const unsub = onSnapshot(q, {
+      next: (snap) => {
+        const data = {};
+        snap.forEach(doc => {
+          data[doc.id] = doc.data();
+        });
+        setWaitTimes(data);
+      },
+      error: (err) => {
+        console.error('Firestore WaitTimes Error:', err);
+        setWaitTimes({});
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const handleSosTrigger = () => {
     setShowSosModal(true);
+  };
+
+  const getStatusInfo = (minutes, type) => {
+    if (minutes === undefined || minutes === null) return { label: 'Unknown', classes: 'bg-surface-container text-slate-500' };
+    const mins = Number(minutes);
+    
+    if (mins <= 5) {
+      let label = 'Fast Flow';
+      if (type === 'food') label = 'Short Queue';
+      if (type === 'restroom') label = 'Cleaned';
+      if (type === 'shop') label = 'Open';
+      return { label, classes: 'bg-tertiary-container text-on-tertiary-container' };
+    }
+    
+    if (mins <= 15) {
+      return { label: 'Moderate', classes: 'bg-secondary-container text-on-secondary-container' };
+    }
+    
+    return { label: 'Busy', classes: 'bg-error-container text-on-error-container' };
   };
 
   const confirmSos = async () => {
@@ -148,8 +188,17 @@ export default function Home() {
             </div>
             <h4 className="font-headline font-bold lg:text-xl mb-1 text-white">Gate A</h4>
             <div className="flex items-center justify-between mt-4 lg:mt-6">
-              <span className="bg-tertiary-container text-on-tertiary-container px-2 lg:px-3 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase tracking-widest">Fast Flow</span>
-              <span className="font-headline font-bold text-primary text-xs lg:text-sm">2m</span>
+              {(() => {
+                const status = getStatusInfo(waitTimes?.gateA?.estimatedWaitMinutes, 'gate');
+                return (
+                  <span className={`${status.classes} px-2 lg:px-3 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase tracking-widest transition-colors duration-500`}>
+                    {status.label}
+                  </span>
+                );
+              })()}
+              <span className="font-headline font-bold text-primary text-xs lg:text-sm">
+                {waitTimes === null ? '–' : waitTimes.gateA ? `${waitTimes.gateA.estimatedWaitMinutes}m` : '–'}
+              </span>
             </div>
           </button>
           
@@ -162,8 +211,17 @@ export default function Home() {
             </div>
             <h4 className="font-headline font-bold lg:text-xl mb-1 text-white">Grill & Chill</h4>
             <div className="flex items-center justify-between mt-4 lg:mt-6">
-              <span className="bg-secondary-container text-on-secondary-container px-2 lg:px-3 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase tracking-widest">Busy</span>
-              <span className="font-headline font-bold text-secondary text-xs lg:text-sm">15m</span>
+              {(() => {
+                const status = getStatusInfo(waitTimes?.grillChill?.estimatedWaitMinutes, 'food');
+                return (
+                  <span className={`${status.classes} px-2 lg:px-3 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase tracking-widest transition-colors duration-500`}>
+                    {status.label}
+                  </span>
+                );
+              })()}
+              <span className="font-headline font-bold text-secondary text-xs lg:text-sm">
+                {waitTimes === null ? '–' : waitTimes.grillChill ? `${waitTimes.grillChill.estimatedWaitMinutes}m` : '–'}
+              </span>
             </div>
           </button>
 
@@ -176,8 +234,17 @@ export default function Home() {
             </div>
             <h4 className="font-headline font-bold lg:text-xl mb-1 text-white">Restrooms</h4>
             <div className="flex items-center justify-between mt-4 lg:mt-6">
-              <span className="bg-tertiary-container text-on-tertiary-container px-2 lg:px-3 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase tracking-widest">Cleaned</span>
-              <span className="font-headline font-bold text-tertiary-dim text-xs lg:text-sm">0m</span>
+              {(() => {
+                const status = getStatusInfo(waitTimes?.restrooms?.estimatedWaitMinutes, 'restroom');
+                return (
+                  <span className={`${status.classes} px-2 lg:px-3 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase tracking-widest transition-colors duration-500`}>
+                    {status.label}
+                  </span>
+                );
+              })()}
+              <span className="font-headline font-bold text-tertiary-dim text-xs lg:text-sm">
+                {waitTimes === null ? '–' : waitTimes.restrooms ? `${waitTimes.restrooms.estimatedWaitMinutes}m` : '–'}
+              </span>
             </div>
           </button>
 
@@ -190,8 +257,17 @@ export default function Home() {
             </div>
             <h4 className="font-headline font-bold lg:text-xl mb-1 text-white">Team Shop</h4>
             <div className="flex items-center justify-between mt-4 lg:mt-6">
-              <span className="bg-primary-container text-on-primary-container px-2 lg:px-3 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase tracking-widest">Open</span>
-              <span className="font-headline font-bold text-primary-dim text-xs lg:text-sm">0m</span>
+              {(() => {
+                const status = getStatusInfo(waitTimes?.teamShop?.estimatedWaitMinutes, 'shop');
+                return (
+                  <span className={`${status.classes} px-2 lg:px-3 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase tracking-widest transition-colors duration-500`}>
+                    {status.label}
+                  </span>
+                );
+              })()}
+              <span className="font-headline font-bold text-primary-dim text-xs lg:text-sm">
+                {waitTimes === null ? '–' : waitTimes.teamShop ? `${waitTimes.teamShop.estimatedWaitMinutes}m` : '–'}
+              </span>
             </div>
           </button>
         </div>
