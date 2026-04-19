@@ -1,0 +1,8 @@
+# .gcloudignore
+.gcloudignore
+.git
+.gitignore
+node_modules/
+
+# Do NOT ignore service-account.json for Cloud Run deployment
+#!service-account.json
